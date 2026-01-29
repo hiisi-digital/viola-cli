@@ -16,6 +16,7 @@ import {
     registerDiscoveredLinters,
     registry,
     runViola,
+    type IssueCatalog,
     type LinterPlugin,
     type ViolaOptions
 } from "@hiisi/viola";
@@ -119,15 +120,25 @@ PLUGINS:
 
 /**
  * Register linters from builder config plugins.
+ * Returns catalogs for rule evaluation.
  */
-function registerBuilderPlugins(plugins: readonly LinterPlugin[]): void {
+function registerBuilderPlugins(plugins: readonly LinterPlugin[]): Map<string, IssueCatalog> {
+  const catalogs = new Map<string, IssueCatalog>();
+  
+  const registerLinter = (linter: BaseLinter) => {
+    registry.register(linter);
+    if (linter.catalog) {
+      catalogs.set(linter.meta.id, linter.catalog);
+    }
+  };
+
   for (const plugin of plugins) {
     if (plugin instanceof BaseLinter) {
-      registry.register(plugin);
+      registerLinter(plugin);
     } else if (Array.isArray(plugin)) {
       for (const linter of plugin) {
         if (linter instanceof BaseLinter) {
-          registry.register(linter);
+          registerLinter(linter);
         }
       }
     } else if (typeof plugin === "object" && plugin !== null) {
@@ -138,23 +149,25 @@ function registerBuilderPlugins(plugins: readonly LinterPlugin[]): void {
       if (linters) {
         for (const linter of linters) {
           if (linter instanceof BaseLinter) {
-            registry.register(linter);
+            registerLinter(linter);
           }
         }
       }
       if (defaultExport) {
         if (defaultExport instanceof BaseLinter) {
-          registry.register(defaultExport);
+          registerLinter(defaultExport);
         } else if (Array.isArray(defaultExport)) {
           for (const linter of defaultExport) {
             if (linter instanceof BaseLinter) {
-              registry.register(linter);
+              registerLinter(linter);
             }
           }
         }
       }
     }
   }
+  
+  return catalogs;
 }
 
 async function listLinters(projectRoot: string, verbose: boolean, configPath?: string): Promise<void> {
@@ -286,11 +299,12 @@ async function run(cliArgs: typeof args): Promise<number> {
 
   try {
     // If we have builder config with plugins, register them directly
+    let catalogs: Map<string, IssueCatalog> | undefined;
     if (hasBuilderPlugins) {
-      registerBuilderPlugins(builderConfig!.plugins);
+      catalogs = registerBuilderPlugins(builderConfig!.plugins);
     }
 
-    // Build options
+    // Build options - include rules from builder config for rule evaluation
     const options: ViolaOptions = {
       projectRoot,
       include,
@@ -302,6 +316,9 @@ async function run(cliArgs: typeof args): Promise<number> {
       parallel: cliArgs.parallel,
       only,
       skip,
+      // Pass rules and catalogs for rule evaluation
+      rules: builderConfig?.rules,
+      catalogs,
     };
 
     const results = await runViola(options);
