@@ -3,19 +3,21 @@
  * Viola CLI
  *
  * Command-line interface for running viola convention checks.
- * Loads configuration from deno.json or viola.json and runs checkers.
+ * Loads configuration from viola.config.ts (preferred) or deno.json.
  *
  * @module
  */
 
 import {
+    BaseLinter,
     discoverPlugins,
     formatResults,
     loadConfig,
     registerDiscoveredLinters,
     registry,
     runViola,
-    type ViolaOptions,
+    type LinterPlugin,
+    type ViolaOptions
 } from "@hiisi/viola";
 import { parseArgs } from "@std/cli/parse-args";
 import { resolve } from "@std/path";
@@ -88,15 +90,17 @@ OPTIONS:
   --plugins <plugins>  Plugin specifiers to load (comma-separated, overrides config)
 
 CONFIGURATION:
-  Config is loaded from deno.json under the "viola" field.
+  Config is loaded from viola.config.ts (preferred) or deno.json.
   
-  Required fields:
-    plugins    - Array of plugin specifiers to load linters from
-  
-  Optional fields:
-    inherit    - Array of preset names to inherit
-    config     - Per-linter configuration options
-    **/*.ts    - File patterns with severity rules
+  Example viola.config.ts:
+    import { viola, report, when, Impact } from "@hiisi/viola";
+    import { defaultLints } from "@hiisi/viola-default-lints";
+    
+    export default viola()
+      .use(defaultLints)
+      .rule(report.error, when.impact.atLeast(Impact.Major))
+      .rule(report.warn, when.impact.is(Impact.Minor))
+      .rule(report.off, when.in("**/*_test.ts"));
 
 EXAMPLES:
   viola
@@ -113,25 +117,67 @@ PLUGINS:
 `);
 }
 
-async function listLinters(projectRoot: string, verbose: boolean): Promise<void> {
+/**
+ * Register linters from builder config plugins.
+ */
+function registerBuilderPlugins(plugins: readonly LinterPlugin[]): void {
+  for (const plugin of plugins) {
+    if (plugin instanceof BaseLinter) {
+      registry.register(plugin);
+    } else if (Array.isArray(plugin)) {
+      for (const linter of plugin) {
+        if (linter instanceof BaseLinter) {
+          registry.register(linter);
+        }
+      }
+    } else if (typeof plugin === "object" && plugin !== null) {
+      // Plugin object with linters or default export
+      const linters = (plugin as { linters?: BaseLinter[]; default?: BaseLinter | BaseLinter[] }).linters;
+      const defaultExport = (plugin as { linters?: BaseLinter[]; default?: BaseLinter | BaseLinter[] }).default;
+      
+      if (linters) {
+        for (const linter of linters) {
+          if (linter instanceof BaseLinter) {
+            registry.register(linter);
+          }
+        }
+      }
+      if (defaultExport) {
+        if (defaultExport instanceof BaseLinter) {
+          registry.register(defaultExport);
+        } else if (Array.isArray(defaultExport)) {
+          for (const linter of defaultExport) {
+            if (linter instanceof BaseLinter) {
+              registry.register(linter);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+async function listLinters(projectRoot: string, verbose: boolean, configPath?: string): Promise<void> {
   // Load config to get plugins
-  const { config } = await loadConfig(projectRoot, { verbose });
+  const { config, builderConfig } = await loadConfig(projectRoot, { verbose, configPath });
   
-  if (config.plugins.length === 0) {
+  // Register linters from builder config or string plugins
+  if (builderConfig && builderConfig.plugins.length > 0) {
+    registerBuilderPlugins(builderConfig.plugins);
+  } else if (config.plugins.length > 0) {
+    console.log("\nLoading plugins...");
+    const discovery = await discoverPlugins(config.plugins, { verbose });
+    registerDiscoveredLinters(discovery);
+  } else {
     console.log("\nNo plugins configured.");
-    console.log("Add plugins to your deno.json viola config to see available linters.");
+    console.log("Create a viola.config.ts with .use() to add linters.");
     console.log("\nExample:");
-    console.log('  "viola": {');
-    console.log('    "plugins": ["@hiisi/viola-default-lints"]');
-    console.log("  }");
+    console.log("  import { viola } from '@hiisi/viola';");
+    console.log("  import { defaultLints } from '@hiisi/viola-default-lints';");
+    console.log("  export default viola().use(defaultLints);");
     console.log();
     return;
   }
-
-  // Load plugins
-  console.log("\nLoading plugins...");
-  const discovery = await discoverPlugins(config.plugins, { verbose });
-  registerDiscoveredLinters(discovery);
 
   const linters = registry.getAll();
   
@@ -146,29 +192,12 @@ async function listLinters(projectRoot: string, verbose: boolean): Promise<void>
 
   for (const linter of linters) {
     const id = linter.meta.id.padEnd(maxIdLen);
-    const sev = (linter.meta.defaultSeverity ?? "warn").padEnd(7);
-    console.log(`  ${id}  [${sev}]  ${linter.meta.description}`);
+    const issueCount = Object.keys(linter.catalog).length;
+    console.log(`  ${id}  (${issueCount} issues)  ${linter.meta.description}`);
   }
 
-  console.log(`\nTotal: ${linters.length} linters from ${config.plugins.length} plugin(s)\n`);
-  
-  // Show bundles and presets if any
-  if (discovery.allBundles.size > 0) {
-    console.log("Bundles:");
-    for (const [name, bundle] of discovery.allBundles) {
-      console.log(`  ${name} (${bundle.linters.length} linters)`);
-    }
-    console.log();
-  }
-  
-  if (discovery.allPresets.size > 0) {
-    console.log("Presets:");
-    for (const [name, preset] of discovery.allPresets) {
-      const defaultTag = preset.isDefault ? " (default)" : "";
-      console.log(`  ${name}${defaultTag}`);
-    }
-    console.log();
-  }
+  const pluginCount = builderConfig?.plugins.length ?? config.plugins.length;
+  console.log(`\nTotal: ${linters.length} linters from ${pluginCount} plugin(s)\n`);
 }
 
 /**
@@ -180,17 +209,19 @@ async function run(cliArgs: typeof args): Promise<number> {
     return 0;
   }
 
-  // Determine project root
+  // Determine project root and config path
   const projectRoot = resolve(cliArgs.project ?? Deno.cwd());
+  const configPath = cliArgs.config ? resolve(cliArgs.config) : undefined;
 
   if (cliArgs.list) {
-    await listLinters(projectRoot, cliArgs.verbose);
+    await listLinters(projectRoot, cliArgs.verbose, configPath);
     return 0;
   }
 
   // Load config
-  const { config, sources } = await loadConfig(projectRoot, {
+  const { config, sources, builderConfig } = await loadConfig(projectRoot, {
     verbose: cliArgs.verbose,
+    configPath,
   });
 
   // Parse CLI overrides
@@ -208,36 +239,24 @@ async function run(cliArgs: typeof args): Promise<number> {
     ? cliArgs.skip.split(",").map((s: string) => s.trim())
     : undefined;
 
-  // Get plugins from CLI or config
-  const plugins = cliArgs.plugins
-    ? cliArgs.plugins.split(",").map((s: string) => s.trim())
-    : config.plugins;
+  // Check if we have plugins (from builder or string specifiers)
+  const hasBuilderPlugins = builderConfig && builderConfig.plugins.length > 0;
+  const hasStringPlugins = config.plugins.length > 0 || cliArgs.plugins;
 
-  if (plugins.length === 0) {
+  if (!hasBuilderPlugins && !hasStringPlugins) {
     console.error("Error: No plugins configured.");
-    console.error("Add plugins to your deno.json viola config or use --plugins flag.");
-    console.error("\nExample config:");
-    console.error('  "viola": {');
-    console.error('    "plugins": ["@hiisi/viola-default-lints"]');
-    console.error("  }");
+    console.error("Create a viola.config.ts with .use() to add linters.");
+    console.error("\nExample:");
+    console.error("  import { viola } from '@hiisi/viola';");
+    console.error("  import { defaultLints } from '@hiisi/viola-default-lints';");
+    console.error("  export default viola().use(defaultLints);");
     return 1;
   }
 
-  // Build options
-  // Note: exclude/extensions from ResolvedConfig are strings, ViolaOptions expects RegExp[]
-  // runViola handles defaults internally, so we don't pass exclude/extensions from config
-  const options: ViolaOptions = {
-    projectRoot,
-    include,
-    plugins,
-    inherit: config.inherit,
-    linterConfig: config.linterConfig,
-    reportOnly: cliArgs["report-only"],
-    verbose: cliArgs.verbose,
-    parallel: cliArgs.parallel,
-    only,
-    skip,
-  };
+  // Get string plugins from CLI or config (only used if no builder config)
+  const plugins = cliArgs.plugins
+    ? cliArgs.plugins.split(",").map((s: string) => s.trim())
+    : config.plugins;
 
   // Print header
   if (cliArgs.verbose) {
@@ -247,7 +266,11 @@ async function run(cliArgs: typeof args): Promise<number> {
     console.log("\nConfiguration:");
     console.log(`  Project root: ${projectRoot}`);
     console.log(`  Include: ${include.join(", ")}`);
-    console.log(`  Plugins: ${plugins.join(", ")}`);
+    if (hasBuilderPlugins) {
+      console.log(`  Plugins: ${builderConfig!.plugins.length} from viola.config.ts`);
+    } else {
+      console.log(`  Plugins: ${plugins.join(", ")}`);
+    }
     console.log(`  Report only: ${cliArgs["report-only"]}`);
     if (config.inherit.length > 0) console.log(`  Inherit: ${config.inherit.join(", ")}`);
     if (only) console.log(`  Only: ${only.join(", ")}`);
@@ -262,6 +285,25 @@ async function run(cliArgs: typeof args): Promise<number> {
   }
 
   try {
+    // If we have builder config with plugins, register them directly
+    if (hasBuilderPlugins) {
+      registerBuilderPlugins(builderConfig!.plugins);
+    }
+
+    // Build options
+    const options: ViolaOptions = {
+      projectRoot,
+      include,
+      plugins: hasBuilderPlugins ? [] : plugins, // Empty if using builder plugins (already registered)
+      inherit: config.inherit,
+      linterConfig: config.linterConfig,
+      reportOnly: cliArgs["report-only"],
+      verbose: cliArgs.verbose,
+      parallel: cliArgs.parallel,
+      only,
+      skip,
+    };
+
     const results = await runViola(options);
     console.log(formatResults(results));
 
