@@ -13,10 +13,10 @@
 ## What it does
 
 `viola-cli` is a command-line interface for [`@hiisi/viola`](https://jsr.io/@hiisi/viola).
-Loads configuration, discovers plugins, and runs convention linters.
+Loads your `viola.config.ts` and runs convention linters.
 
-Use this when you want to run viola from deno tasks or scripts without writing
-your own runner. For programmatic use or custom integrations, use `@hiisi/viola` directly.
+Use this when you want to run viola from deno tasks, CI, or pre-commit hooks.
+For programmatic use or custom integrations, use `@hiisi/viola` directly.
 
 ## Installation
 
@@ -30,107 +30,57 @@ Or run directly:
 deno run -A jsr:@hiisi/viola-cli
 ```
 
+## Quick Start
+
+1. Create a `viola.config.ts`:
+
+```ts
+import { viola } from "@hiisi/viola";
+import { defaultLints } from "@hiisi/viola-default-lints";
+
+export default viola()
+  .use(defaultLints)
+  .error(">=major")
+  .warn("=minor")
+  .in("**/*_test.ts").off();
+```
+
+2. Run:
+
+```bash
+deno run -A jsr:@hiisi/viola-cli
+```
+
 ## Usage
 
 ```bash
-# Run all linters from discovered plugins
-viola
-
-# Specify plugins explicitly
-viola --plugins ./my-linters.ts,jsr:@scope/linters
-
-# Report only (don't fail on errors)
-viola --report-only
-
-# Run specific linters
-viola --only my-linter,another-linter
-
-# Skip linters
-viola --skip slow-linter
-
-# Verbose output
-viola --verbose
-
-# Custom project root
-viola --project /path/to/project
-
-# List available linters
-viola --list
+viola                          # Run with viola.config.ts
+viola --config ./other.ts      # Use different config
+viola --report-only            # Don't fail on errors
+viola --only my-linter         # Run specific linters
+viola --skip slow-linter       # Skip specific linters
+viola --verbose                # Verbose output
+viola --project /path/to/proj  # Custom project root
+viola --list                   # List available linters
+viola --watch                  # Watch mode
 ```
-
-## Plugin Discovery
-
-The CLI discovers linters from:
-
-1. `--plugins` flag (comma-separated paths or JSR specifiers)
-2. `viola.plugins` in deno.json
-3. `plugins` field in viola.json
-
-Plugins are modules that export linter classes extending `BaseLinter`.
 
 ## Configuration
 
-Config is loaded from (in order of precedence):
+The CLI loads config from `viola.config.ts` in the current directory (or use `--config`).
 
-1. `--config` flag
-2. `VIOLA_CONFIG` environment variable
-3. `viola.json` in current/parent directories
-4. `deno.json` `viola` field
+See [`@hiisi/viola`](https://jsr.io/@hiisi/viola) for full configuration documentation.
 
-### deno.json
+```ts
+import { viola } from "@hiisi/viola";
 
-```json
-{
-  "viola": {
-    "plugins": ["./linters/mod.ts"],
-    "only": ["my-linter"],
-    "skip": ["slow-linter"],
-    "include": ["src", "packages"],
-    "linters": {
-      "my-linter": {
-        "threshold": 10
-      }
-    },
-    "scopes": {
-      "packages/legacy/**": {
-        "skip": ["strict-linter"]
-      }
-    }
-  }
-}
-```
-
-### viola.json
-
-```json
-{
-  "plugins": ["jsr:@scope/my-linters"],
-  "only": ["linter-a", "linter-b"],
-  "include": ["src"],
-  "linters": {
-    "linter-a": {
-      "severity": "error"
-    }
-  },
-  "scopes": {
-    "src/generated/**": {
-      "skip": ["linter-a"]
-    }
-  }
-}
-```
-
-Subdirectory `viola.json` files inherit from parent configs and can override settings.
-
-### Config Presets
-
-You can inherit from preset configurations:
-
-```json
-{
-  "inherit": ["@scope/viola-presets/strict"],
-  "plugins": ["./additional-linters.ts"]
-}
+export default viola()
+  .use(myLinters)
+  .set("my-linter.threshold", 0.85)
+  .error(">=major")
+  .warn("=minor")
+  .in("**/*_test.ts").off()
+  .in("src/generated/**").skip();
 ```
 
 ## Deno Task
@@ -138,9 +88,24 @@ You can inherit from preset configurations:
 ```json
 {
   "tasks": {
-    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli"
+    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli",
+    "build": "deno task lint:conventions && deno task compile"
   }
 }
+```
+
+## Pre-commit Hook
+
+```bash
+#!/bin/sh
+deno run -A jsr:@hiisi/viola-cli || exit 1
+```
+
+## CI
+
+```yaml
+- name: Convention Lint
+  run: deno run -A jsr:@hiisi/viola-cli
 ```
 
 ## Support
