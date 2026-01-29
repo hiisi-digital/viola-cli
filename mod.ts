@@ -22,7 +22,29 @@ import { resolve } from "@std/path";
 
 export { main, run };
 
-const args = parseArgs(Deno.args, {
+interface CliArgs {
+  help: boolean;
+  "report-only": boolean;
+  verbose: boolean;
+  list: boolean;
+  parallel: boolean;
+  only?: string;
+  skip?: string;
+  include?: string;
+  project?: string;
+  config?: string;
+  plugins?: string;
+  h?: boolean;
+  r?: boolean;
+  v?: boolean;
+  l?: boolean;
+  p?: string;
+  i?: string;
+  c?: string;
+  _: (string | number)[];
+}
+
+const args: CliArgs = parseArgs(Deno.args, {
   boolean: ["help", "report-only", "verbose", "list", "parallel"],
   string: ["only", "skip", "include", "project", "config", "plugins"],
   alias: {
