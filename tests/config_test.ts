@@ -1,8 +1,8 @@
 /**
  * Tests for configuration loading
  */
-import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
-import { resolve, join } from "@std/path";
+import { assertEquals, assertRejects, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { resolve, join } from "https://deno.land/std@0.224.0/path/mod.ts";
 
 // Mock the loadConfig function behavior
 // Since we can't easily import from @hiisi/viola in tests, we'll test the CLI behavior

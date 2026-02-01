@@ -1,8 +1,8 @@
 /**
  * Unit tests for CLI argument parsing and helper functions
  */
-import { assertEquals, assertStringIncludes } from "@std/assert";
-import { parseArgs } from "@std/cli/parse-args";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { parseArgs } from "https://deno.land/std@0.224.0/cli/parse_args.ts";
 
 // Test parseArgs behavior (we use @std/cli/parse-args)
 Deno.test("parseArgs - handles boolean flags", () => {
