@@ -163,7 +163,7 @@ async function listLinters(projectRoot: string, verbose: boolean, configPath?: s
 
   console.log("\nAvailable linters:\n");
 
-  const maxIdLen = Math.max(...linters.map((l) => l.meta.id.length));
+  const maxIdLen = Math.max(...linters.map((l: BaseLinter) => l.meta.id.length));
 
   for (const linter of linters) {
     const id = linter.meta.id.padEnd(maxIdLen);
