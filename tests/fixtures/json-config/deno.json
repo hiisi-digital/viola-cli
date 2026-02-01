@@ -1,0 +1,6 @@
+{
+  "viola": {
+    "include": ["src"],
+    "plugins": []
+  }
+}
