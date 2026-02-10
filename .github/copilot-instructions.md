@@ -5,6 +5,7 @@ CLI for the Viola convention linter. Runtime: Deno (TypeScript).
 ## Project Context
 
 This is a command-line interface that wraps `@hiisi/viola` core. It handles:
+
 - Argument parsing
 - Config file loading (viola.config.ts or deno.json)
 - Output formatting
@@ -36,9 +37,11 @@ The core package is published to JSR. Use the JSR import:
 
 **The CLI is intentionally a single mod.ts file**
 
-Don't split into modules unless the file exceeds ~500 LOC with clear separation concerns.
+Don't split into modules unless the file exceeds ~500 LOC with clear separation
+concerns.
 
 **Implications:**
+
 - All CLI code lives in mod.ts
 - Tests go in tests/ directory
 - Keep functions small and well-documented
@@ -50,6 +53,7 @@ Don't split into modules unless the file exceeds ~500 LOC with clear separation 
 Error messages should tell users what went wrong AND how to fix it.
 
 **Implications:**
+
 - Every error includes a suggestion or next step
 - Help text is comprehensive but scannable
 - Verbose mode provides debugging context
@@ -62,6 +66,7 @@ Error messages should tell users what went wrong AND how to fix it.
 Users expect command-line flags to override file config.
 
 **Implications:**
+
 - Always check CLI args first
 - Merge configs in correct order
 - Document precedence clearly
@@ -73,6 +78,7 @@ Users expect command-line flags to override file config.
 Handle all error cases with helpful messages.
 
 **Implications:**
+
 - Catch and format all errors
 - Missing config → helpful setup instructions
 - Bad config → specific error with line number if possible
@@ -85,6 +91,7 @@ Handle all error cases with helpful messages.
 Tests should cover argument parsing, config loading, and output formatting.
 
 **Implications:**
+
 - Unit tests for each function
 - Integration tests for full CLI runs
 - Snapshot tests for output format
@@ -230,12 +237,12 @@ Do not add new dependencies without explicit approval.
 
 ## Code Constraints
 
-| Rule | Limit | Reason |
-|------|-------|--------|
-| mod.ts size | <500 LOC | Single-file simplicity |
-| Function length | <50 LOC | Readability |
-| Cyclomatic complexity | <10 | Maintainability |
-| Test coverage | >80% | Reliability |
+| Rule                  | Limit    | Reason                 |
+| --------------------- | -------- | ---------------------- |
+| mod.ts size           | <500 LOC | Single-file simplicity |
+| Function length       | <50 LOC  | Readability            |
+| Cyclomatic complexity | <10      | Maintainability        |
+| Test coverage         | >80%     | Reliability            |
 
 ## Testing Guidelines
 
