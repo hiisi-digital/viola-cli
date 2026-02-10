@@ -2,7 +2,9 @@
 
 ## Overview
 
-`@hiisi/viola-cli` is the command-line interface for the Viola convention linter. It provides a user-friendly way to run viola from the terminal, deno tasks, CI pipelines, and pre-commit hooks.
+`@hiisi/viola-cli` is the command-line interface for the Viola convention
+linter. It provides a user-friendly way to run viola from the terminal, deno
+tasks, CI pipelines, and pre-commit hooks.
 
 ## Purpose
 
@@ -50,19 +52,19 @@ This package provides:
 
 ## CLI Options
 
-| Flag | Alias | Description |
-|------|-------|-------------|
-| `--help` | `-h` | Show help message |
-| `--report-only` | `-r` | Report issues without failing (exit 0) |
-| `--verbose` | `-v` | Verbose output with detailed info |
-| `--list` | `-l` | List available linters |
-| `--parallel` | | Run linters in parallel |
-| `--only` | | Only run specified linters (comma-separated) |
-| `--skip` | | Skip specified linters (comma-separated) |
-| `--include` | `-i` | Directories to include (comma-separated) |
-| `--project` | `-p` | Project root directory |
-| `--config` | `-c` | Path to config file |
-| `--plugins` | | Plugin specifiers (overrides config) |
+| Flag            | Alias | Description                                  |
+| --------------- | ----- | -------------------------------------------- |
+| `--help`        | `-h`  | Show help message                            |
+| `--report-only` | `-r`  | Report issues without failing (exit 0)       |
+| `--verbose`     | `-v`  | Verbose output with detailed info            |
+| `--list`        | `-l`  | List available linters                       |
+| `--parallel`    |       | Run linters in parallel                      |
+| `--only`        |       | Only run specified linters (comma-separated) |
+| `--skip`        |       | Skip specified linters (comma-separated)     |
+| `--include`     | `-i`  | Directories to include (comma-separated)     |
+| `--project`     | `-p`  | Project root directory                       |
+| `--config`      | `-c`  | Path to config file                          |
+| `--plugins`     |       | Plugin specifiers (overrides config)         |
 
 ## Configuration Loading
 
@@ -77,7 +79,7 @@ The CLI loads configuration from multiple sources in order:
 The preferred way to configure viola:
 
 ```typescript
-import { viola, report, when } from "@hiisi/viola";
+import { report, viola, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
@@ -107,12 +109,13 @@ The CLI supports two modes of linter registration:
 
 ### 1. Builder Config (Preferred)
 
-When using `viola().use()` in `viola.config.ts`, linters are registered directly from the builder config:
+When using `viola().use()` in `viola.config.ts`, linters are registered directly
+from the builder config:
 
 ```typescript
 // viola.config.ts
 export default viola()
-  .use(defaultLints)  // Linters added via builder
+  .use(defaultLints) // Linters added via builder
   .add(customLinter);
 ```
 
@@ -150,6 +153,7 @@ Summary: 1 error, 1 warning
 ### Verbose Output
 
 With `--verbose`, includes:
+
 - Configuration sources
 - Plugin loading details
 - Timing information
@@ -171,10 +175,10 @@ Total: 9 linters loaded
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success (no errors, or `--report-only`) |
-| 1 | Errors found |
+| Code | Meaning                                 |
+| ---- | --------------------------------------- |
+| 0    | Success (no errors, or `--report-only`) |
+| 1    | Errors found                            |
 
 ## Error Handling
 
@@ -244,7 +248,9 @@ viola-cli/
 
 ### Single File vs. Module Structure
 
-Currently implemented as a single `mod.ts` for simplicity. The CLI is relatively small (~300 LOC) and doesn't benefit much from modularization. If the CLI grows significantly, consider splitting into:
+Currently implemented as a single `mod.ts` for simplicity. The CLI is relatively
+small (~300 LOC) and doesn't benefit much from modularization. If the CLI grows
+significantly, consider splitting into:
 
 - `src/cli.ts` - Argument parsing
 - `src/config.ts` - Config loading
@@ -253,7 +259,9 @@ Currently implemented as a single `mod.ts` for simplicity. The CLI is relatively
 
 ### No Subcommands
 
-The CLI uses a flat command structure (flags only, no subcommands like `viola run`, `viola init`). This keeps the interface simple. If we add subcommands later, we'd use:
+The CLI uses a flat command structure (flags only, no subcommands like
+`viola run`, `viola init`). This keeps the interface simple. If we add
+subcommands later, we'd use:
 
 - `viola` or `viola check` - Run linter (default)
 - `viola init` - Create config file
@@ -262,11 +270,13 @@ The CLI uses a flat command structure (flags only, no subcommands like `viola ru
 ### Permissions
 
 The CLI requires `-A` (all permissions) because:
+
 - Reads arbitrary project files
 - Dynamically imports plugins
 - Resolves paths across the filesystem
 
 For restricted environments, consider:
+
 - `--allow-read` for project files
 - `--allow-net` for remote plugins (JSR/npm)
 - `--allow-env` for config from environment

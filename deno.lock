@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@hiisi/flash-freeze@0.1": "0.1.1",
     "jsr:@hiisi/viola@0.1": "0.1.5",
+    "jsr:@std/assert@1": "1.0.17",
     "jsr:@std/cli@1": "1.0.26",
     "jsr:@std/fs@1": "1.0.22",
     "jsr:@std/internal@^1.0.12": "1.0.12",
@@ -21,6 +22,12 @@
         "jsr:@std/fs",
         "jsr:@std/path@1",
         "npm:web-tree-sitter"
+      ]
+    },
+    "@std/assert@1.0.17": {
+      "integrity": "df5ebfffe77c03b3fa1401e11c762cc8f603d51021c56c4d15a8c7ab45e90dbe",
+      "dependencies": [
+        "jsr:@std/internal"
       ]
     },
     "@std/cli@1.0.26": {

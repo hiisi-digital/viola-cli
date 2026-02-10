@@ -12,8 +12,9 @@
 
 ## What it does
 
-`viola-cli` is a command-line interface for [`@hiisi/viola`](https://jsr.io/@hiisi/viola).
-Loads your `viola.config.ts` and runs convention linters.
+`viola-cli` is a command-line interface for
+[`@hiisi/viola`](https://jsr.io/@hiisi/viola). Loads your `viola.config.ts` and
+runs convention linters.
 
 Use this when you want to run viola from deno tasks, CI, or pre-commit hooks.
 For programmatic use or custom integrations, use `@hiisi/viola` directly.
@@ -35,12 +36,12 @@ deno run -A jsr:@hiisi/viola-cli
 1. Create a `viola.config.ts`:
 
 ```ts
-import { viola, report, when } from "@hiisi/viola";
+import { report, viola, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
-  .use(defaultLints)  // adds linters + default rules
-  .rule(report.off, when.in("**/*_test.ts"));  // your overrides
+  .use(defaultLints) // adds linters + default rules
+  .rule(report.off, when.in("**/*_test.ts")); // your overrides
 ```
 
 2. Run:
@@ -64,12 +65,14 @@ viola --list                   # List available linters
 
 ## Configuration
 
-The CLI loads config from `viola.config.ts` in the current directory (or use `--config`).
+The CLI loads config from `viola.config.ts` in the current directory (or use
+`--config`).
 
-See [`@hiisi/viola`](https://jsr.io/@hiisi/viola) for full configuration documentation.
+See [`@hiisi/viola`](https://jsr.io/@hiisi/viola) for full configuration
+documentation.
 
 ```ts
-import { viola, report, when, Impact, Category } from "@hiisi/viola";
+import { Category, Impact, report, viola, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
@@ -115,7 +118,8 @@ on open-source projects like this :)
 
 ## License
 
-> You can check out the full license [here](https://github.com/hiisi-digital/viola-cli/blob/main/LICENSE)
+> You can check out the full license
+> [here](https://github.com/hiisi-digital/viola-cli/blob/main/LICENSE)
 
 This project is licensed under the terms of the **Mozilla Public License 2.0**.
 
