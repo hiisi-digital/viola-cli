@@ -21,6 +21,12 @@
     "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1",
     "@hiisi/viola": "jsr:@hiisi/viola@^0.1"
   },
+  "lint": {
+    "exclude": ["tests/fixtures/invalid-config/"]
+  },
+  "fmt": {
+    "exclude": ["tests/fixtures/invalid-config/"]
+  },
   "compilerOptions": {
     "strict": true,
     "noImplicitAny": true,

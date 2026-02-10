@@ -5,6 +5,7 @@ Command-line interface for the Viola convention linter.
 ## ✅ Phase 1: Core Implementation (COMPLETED)
 
 ### CLI Foundation
+
 - [x] Argument parsing with @std/cli
 - [x] Help message and usage documentation
 - [x] Config loading from viola.config.ts
@@ -13,6 +14,7 @@ Command-line interface for the Viola convention linter.
 - [x] Exit codes (0 success, 1 errors)
 
 ### Linter Integration
+
 - [x] Builder config linter registration
 - [x] String plugin specifier support (legacy)
 - [x] Plugin discovery and loading
@@ -20,6 +22,7 @@ Command-line interface for the Viola convention linter.
 - [x] Include directory filtering
 
 ### Output
+
 - [x] Human-readable issue formatting
 - [x] Verbose mode with detailed info
 - [x] Linter listing (--list)
@@ -28,6 +31,7 @@ Command-line interface for the Viola convention linter.
 ## 🚧 Phase 2: Testing (IN PROGRESS)
 
 ### Unit Tests (`tests/cli_test.ts`)
+
 - [ ] Argument parsing tests
   - [ ] Boolean flags (--help, --verbose, --report-only)
   - [ ] String options (--config, --project, --only, --skip)
@@ -36,6 +40,7 @@ Command-line interface for the Viola convention linter.
 - [ ] showHelp() output verification
 
 ### Config Loading Tests (`tests/config_test.ts`)
+
 - [ ] Load from viola.config.ts
 - [ ] Load from deno.json viola section
 - [ ] Config source precedence (CLI > config file)
@@ -43,6 +48,7 @@ Command-line interface for the Viola convention linter.
 - [ ] Invalid config error handling
 
 ### Integration Tests (`tests/integration_test.ts`)
+
 - [ ] Run on fixture project with known issues
 - [ ] Verify correct issue detection
 - [ ] Verify exit codes
@@ -50,6 +56,7 @@ Command-line interface for the Viola convention linter.
 - [ ] Verify --only/--skip filtering
 
 ### Test Fixtures (`tests/fixtures/`)
+
 - [ ] Create minimal test project
 - [ ] Config variants (builder, JSON, missing)
 - [ ] Known issues for assertion
@@ -57,11 +64,13 @@ Command-line interface for the Viola convention linter.
 ## 📋 Phase 3: Polish & Enhancements
 
 ### Error Messages
+
 - [ ] Improve "no plugins" error with clearer instructions
 - [ ] Add suggestions for common misconfigurations
 - [ ] Better error context for plugin load failures
 
 ### Output Formatting
+
 - [ ] Add color support (when TTY)
 - [ ] Add `--json` output format for tooling
 - [ ] Add `--quiet` mode (errors only, no summary)
@@ -69,11 +78,13 @@ Command-line interface for the Viola convention linter.
 - [ ] Group issues by linter option
 
 ### Performance
+
 - [ ] Measure and optimize startup time
 - [ ] Profile parallel vs sequential execution
 - [ ] Consider caching for repeated runs
 
 ### Documentation
+
 - [ ] Add examples to README for all flags
 - [ ] Document config file options comprehensively
 - [ ] Add troubleshooting section
@@ -81,26 +92,31 @@ Command-line interface for the Viola convention linter.
 ## 📋 Phase 4: Advanced Features (Future)
 
 ### Init Command
+
 - [ ] `viola init` to create viola.config.ts
 - [ ] Interactive plugin selection
 - [ ] Template-based config generation
 
 ### Watch Mode
+
 - [ ] `--watch` flag for continuous linting
 - [ ] Incremental re-check on file changes
 - [ ] Integration with file watchers
 
 ### IDE Integration
+
 - [ ] Language Server Protocol (LSP) support
 - [ ] Diagnostic output format for editors
 - [ ] Quick fix suggestions
 
 ### Caching
+
 - [ ] Cache parsed ASTs between runs
 - [ ] Cache extraction results
 - [ ] Invalidation on file change
 
 ### Baseline
+
 - [ ] `--baseline` to ignore existing issues
 - [ ] Baseline file generation
 - [ ] Only report new issues mode
@@ -117,6 +133,7 @@ Command-line interface for the Viola convention linter.
 ### Current State
 
 The CLI is functionally complete for basic usage. The main gaps are:
+
 1. **Testing** - No tests exist yet
 2. **JSON output** - Only human-readable format
 3. **Color output** - Plain text only
@@ -131,6 +148,7 @@ The CLI is functionally complete for basic usage. The main gaps are:
 ### Dependencies
 
 Only these should be used:
+
 - `@hiisi/viola` - Core runtime (already in use)
 - `@std/cli` - Argument parsing (already in use)
 - `@std/path` - Path utilities (already in use)

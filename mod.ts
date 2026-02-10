@@ -9,15 +9,15 @@
  */
 
 import {
-    BaseLinter,
-    discoverPlugins,
-    formatResults,
-    loadConfig,
-    registerDiscoveredLinters,
-    registry,
-    runViola,
-    type IssueCatalog,
-    type ViolaOptions
+  type BaseLinter,
+  discoverPlugins,
+  formatResults,
+  type IssueCatalog,
+  loadConfig,
+  registerDiscoveredLinters,
+  registry,
+  runViola,
+  type ViolaOptions,
 } from "@hiisi/viola";
 import { parseArgs } from "@std/cli/parse-args";
 import { resolve } from "@std/path";
@@ -119,23 +119,32 @@ PLUGINS:
  * Register linters from builder config.
  * Returns catalogs for rule evaluation.
  */
-function registerBuilderLinters(linters: readonly BaseLinter[]): Map<string, IssueCatalog> {
+function registerBuilderLinters(
+  linters: readonly BaseLinter[],
+): Map<string, IssueCatalog> {
   const catalogs = new Map<string, IssueCatalog>();
-  
+
   for (const linter of linters) {
     registry.register(linter);
     if (linter.catalog) {
       catalogs.set(linter.meta.id, linter.catalog);
     }
   }
-  
+
   return catalogs;
 }
 
-async function listLinters(projectRoot: string, verbose: boolean, configPath?: string): Promise<void> {
+async function listLinters(
+  projectRoot: string,
+  verbose: boolean,
+  configPath?: string,
+): Promise<void> {
   // Load config to get linters
-  const { config, builderConfig } = await loadConfig(projectRoot, { verbose, configPath });
-  
+  const { config, builderConfig } = await loadConfig(projectRoot, {
+    verbose,
+    configPath,
+  });
+
   // Register linters from builder config or string plugins
   if (builderConfig && builderConfig.linters.length > 0) {
     registerBuilderLinters(builderConfig.linters);
@@ -155,7 +164,7 @@ async function listLinters(projectRoot: string, verbose: boolean, configPath?: s
   }
 
   const linters = registry.getAll();
-  
+
   if (linters.length === 0) {
     console.log("\nNo linters found in loaded plugins.");
     return;
@@ -163,7 +172,9 @@ async function listLinters(projectRoot: string, verbose: boolean, configPath?: s
 
   console.log("\nAvailable linters:\n");
 
-  const maxIdLen = Math.max(...linters.map((l: BaseLinter) => l.meta.id.length));
+  const maxIdLen = Math.max(
+    ...linters.map((l: BaseLinter) => l.meta.id.length),
+  );
 
   for (const linter of linters) {
     const id = linter.meta.id.padEnd(maxIdLen);
@@ -171,7 +182,7 @@ async function listLinters(projectRoot: string, verbose: boolean, configPath?: s
     console.log(`  ${id}  (${issueCount} issues)  ${linter.meta.description}`);
   }
 
-  const linterCount = builderConfig?.linters.length ?? config.plugins.length;
+  const _linterCount = builderConfig?.linters.length ?? config.plugins.length;
   console.log(`\nTotal: ${linters.length} linters loaded\n`);
 }
 
@@ -203,8 +214,8 @@ async function run(cliArgs: typeof args): Promise<number> {
   const include = cliArgs.include
     ? cliArgs.include.split(",").map((s: string) => s.trim())
     : config.include.length > 0
-      ? config.include
-      : ["src", "packages", "app"];
+    ? config.include
+    : ["src", "packages", "app"];
 
   const only = cliArgs.only
     ? cliArgs.only.split(",").map((s: string) => s.trim())
@@ -223,7 +234,9 @@ async function run(cliArgs: typeof args): Promise<number> {
     console.error("Create a viola.config.ts with .use() to add linters.");
     console.error("\nExample:");
     console.error("  import { viola } from '@hiisi/viola';");
-    console.error("  import { defaultLints } from '@hiisi/viola-default-lints';");
+    console.error(
+      "  import { defaultLints } from '@hiisi/viola-default-lints';",
+    );
     console.error("  export default viola().use(defaultLints);");
     return 1;
   }
@@ -242,12 +255,16 @@ async function run(cliArgs: typeof args): Promise<number> {
     console.log(`  Project root: ${projectRoot}`);
     console.log(`  Include: ${include.join(", ")}`);
     if (hasBuilderLinters) {
-      console.log(`  Linters: ${builderConfig!.linters.length} from viola.config.ts`);
+      console.log(
+        `  Linters: ${builderConfig!.linters.length} from viola.config.ts`,
+      );
     } else {
       console.log(`  Plugins: ${plugins.join(", ")}`);
     }
     console.log(`  Report only: ${cliArgs["report-only"]}`);
-    if (config.inherit.length > 0) console.log(`  Inherit: ${config.inherit.join(", ")}`);
+    if (config.inherit.length > 0) {
+      console.log(`  Inherit: ${config.inherit.join(", ")}`);
+    }
     if (only) console.log(`  Only: ${only.join(", ")}`);
     if (skip) console.log(`  Skip: ${skip.join(", ")}`);
     if (sources.length > 0) {

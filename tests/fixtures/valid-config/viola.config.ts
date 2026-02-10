@@ -2,7 +2,7 @@
  * Test fixture: Valid viola.config.ts
  * This config uses a mock linter for testing purposes
  */
-import { viola, BaseLinter } from "@hiisi/viola";
+import { BaseLinter, viola } from "@hiisi/viola";
 
 // Mock linter for testing
 class TestLinter extends BaseLinter {

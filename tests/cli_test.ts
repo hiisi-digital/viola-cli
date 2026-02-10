@@ -1,8 +1,8 @@
 /**
  * Unit tests for CLI argument parsing and helper functions
  */
-import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { parseArgs } from "https://deno.land/std@0.224.0/cli/parse_args.ts";
+import { assertEquals, assertStringIncludes } from "@std/assert";
+import { parseArgs } from "@std/cli/parse-args";
 
 // Test parseArgs behavior (we use @std/cli/parse-args)
 Deno.test("parseArgs - handles boolean flags", () => {
@@ -52,7 +52,7 @@ Deno.test("parseArgs - handles string options", () => {
         verbose: false,
         parallel: false,
       },
-    }
+    },
   );
 
   assertEquals(parsed.config, "viola.config.ts");
@@ -221,7 +221,7 @@ Deno.test("parseArgs - handles --only and --skip", () => {
         verbose: false,
         parallel: false,
       },
-    }
+    },
   );
 
   assertEquals(parsed.only, "linter1,linter2");
@@ -275,7 +275,7 @@ Deno.test("parseArgs - handles --parallel flag", () => {
 });
 
 // Test showHelp output (we import from mod.ts)
-Deno.test("showHelp - includes all flags", async () => {
+Deno.test("showHelp - includes all flags", () => {
   // We need to capture console.log output
   const originalLog = console.log;
   const logs: string[] = [];
@@ -287,7 +287,7 @@ Deno.test("showHelp - includes all flags", async () => {
     // Import showHelp from mod.ts
     // Since showHelp is not exported, we'll test the help flag behavior in integration tests
     // For now, we'll verify the expected content structure
-    
+
     // Restore console.log
     console.log = originalLog;
 
@@ -302,7 +302,7 @@ Deno.test("showHelp - includes all flags", async () => {
 Deno.test("showHelp - contains required information", () => {
   // Read mod.ts and verify help message structure
   const modTs = Deno.readTextFileSync("./mod.ts");
-  
+
   assertStringIncludes(modTs, "--help");
   assertStringIncludes(modTs, "--report-only");
   assertStringIncludes(modTs, "--verbose");
@@ -314,7 +314,7 @@ Deno.test("showHelp - contains required information", () => {
   assertStringIncludes(modTs, "--project");
   assertStringIncludes(modTs, "--config");
   assertStringIncludes(modTs, "--plugins");
-  
+
   // Check aliases
   assertStringIncludes(modTs, "-h");
   assertStringIncludes(modTs, "-r");
