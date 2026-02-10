@@ -298,6 +298,8 @@ async function run(cliArgs: typeof args): Promise<number> {
       // Pass rules and catalogs for rule evaluation
       rules: builderConfig?.rules,
       catalogs,
+      // Pass grammar registry for tree-sitter based extraction
+      grammarRegistry: builderConfig?.grammarRegistry,
     };
 
     const results = await runViola(options);
@@ -435,6 +437,7 @@ async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Pr
       skip,
       rules: builderConfig?.rules,
       catalogs,
+      grammarRegistry: builderConfig?.grammarRegistry,
     };
 
     const results = await runViola(options);
