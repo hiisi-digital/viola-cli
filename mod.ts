@@ -22,7 +22,7 @@ import {
 import { parseArgs } from "@std/cli/parse-args";
 import { resolve } from "@std/path";
 
-export { main, run };
+export { main, run, runWithLoadedConfig };
 
 interface CliArgs {
   help: boolean;
@@ -321,9 +321,192 @@ async function run(cliArgs: typeof args): Promise<number> {
 }
 
 /**
+ * Run viola with a pre-loaded config module (for use from local runner scripts).
+ * This bypasses the file:// import issue when running from JSR context.
+ */
+async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Promise<number> {
+  const cliArgs: CliArgs = parseArgs(rawArgs, {
+    boolean: ["help", "report-only", "verbose", "list", "parallel"],
+    string: ["only", "skip", "include", "project", "config", "plugins"],
+    alias: {
+      h: "help",
+      r: "report-only",
+      v: "verbose",
+      l: "list",
+      p: "project",
+      i: "include",
+      c: "config",
+    },
+    default: {
+      "report-only": false,
+      verbose: false,
+      parallel: false,
+    },
+  });
+
+  if (cliArgs.help) {
+    showHelp();
+    return 0;
+  }
+
+  const projectRoot = resolve(cliArgs.project ?? Deno.cwd());
+  const configPath = cliArgs.config ? resolve(cliArgs.config) : undefined;
+
+  // Load config with pre-loaded module
+  const { config, sources, builderConfig } = await loadConfig(projectRoot, {
+    verbose: cliArgs.verbose,
+    configPath,
+    preloadedModule: configModule,
+  });
+
+  if (cliArgs.list) {
+    if (builderConfig && builderConfig.linters.length > 0) {
+      registerBuilderLinters(builderConfig.linters);
+    } else if (config.plugins.length > 0) {
+      console.log("\nLoading plugins...");
+      const discovery = await discoverPlugins(config.plugins, { verbose: cliArgs.verbose });
+      registerDiscoveredLinters(discovery);
+    } else {
+      console.log("\nNo plugins configured.");
+      return 1;
+    }
+
+    const linters = registry.getAll();
+    if (linters.length === 0) {
+      console.log("\nNo linters found in loaded plugins.");
+      return 0;
+    }
+
+    console.log("\nAvailable linters:\n");
+    const maxIdLen = Math.max(...linters.map((l: BaseLinter) => l.meta.id.length));
+    for (const linter of linters) {
+      const id = linter.meta.id.padEnd(maxIdLen);
+      const issueCount = Object.keys(linter.catalog).length;
+      console.log(`  ${id}  (${issueCount} issues)  ${linter.meta.description}`);
+    }
+    console.log(`\nTotal: ${linters.length} linters loaded\n`);
+    return 0;
+  }
+
+  // Same logic as run() from here
+  const include = cliArgs.include
+    ? cliArgs.include.split(",").map((s: string) => s.trim())
+    : config.include.length > 0
+    ? config.include
+    : ["src", "packages", "app"];
+
+  const only = cliArgs.only
+    ? cliArgs.only.split(",").map((s: string) => s.trim())
+    : undefined;
+
+  const skip = cliArgs.skip
+    ? cliArgs.skip.split(",").map((s: string) => s.trim())
+    : undefined;
+
+  const hasBuilderLinters = builderConfig && builderConfig.linters.length > 0;
+  const hasStringPlugins = config.plugins.length > 0 || cliArgs.plugins;
+
+  if (!hasBuilderLinters && !hasStringPlugins) {
+    console.error("Error: No plugins configured.");
+    console.error("Create a viola.config.ts with .use() to add linters.");
+    return 1;
+  }
+
+  const plugins = cliArgs.plugins
+    ? cliArgs.plugins.split(",").map((s: string) => s.trim())
+    : config.plugins;
+
+  try {
+    let catalogs: Map<string, IssueCatalog> | undefined;
+    if (hasBuilderLinters) {
+      catalogs = registerBuilderLinters(builderConfig!.linters);
+    }
+
+    const options: ViolaOptions = {
+      projectRoot,
+      include,
+      plugins: hasBuilderLinters ? [] : plugins,
+      inherit: config.inherit,
+      linterConfig: config.linterConfig,
+      reportOnly: cliArgs["report-only"],
+      verbose: cliArgs.verbose,
+      parallel: cliArgs.parallel,
+      only,
+      skip,
+      rules: builderConfig?.rules,
+      catalogs,
+    };
+
+    const results = await runViola(options);
+    console.log(formatResults(results));
+
+    if (results.hasErrors && !cliArgs["report-only"]) {
+      return 1;
+    }
+    return 0;
+  } catch (error) {
+    console.error("\nError:");
+    console.error(error instanceof Error ? error.message : String(error));
+    if (cliArgs.verbose && error instanceof Error && error.stack) {
+      console.error("\nStack trace:");
+      console.error(error.stack);
+    }
+    return 1;
+  }
+}
+
+/**
  * Main entry point.
+ *
+ * When running from a non-file context (e.g., jsr:), creates a temporary
+ * local runner script to bridge the config loading (file:// imports don't
+ * work from network-origin modules).
  */
 async function main(): Promise<void> {
+  const isRemoteOrigin = !import.meta.url.startsWith("file://");
+
+  if (isRemoteOrigin) {
+    // Find the config file path
+    const projectRoot = args.project ? resolve(args.project) : Deno.cwd();
+    const configPath = args.config
+      ? resolve(args.config)
+      : resolve(projectRoot, "viola.config.ts");
+
+    // Check if config file exists
+    try {
+      await Deno.stat(configPath);
+    } catch {
+      // No config file - fall through to normal run (will show error message)
+      const code = await run(args);
+      Deno.exit(code);
+      return;
+    }
+
+    // Create a temp runner that loads the config from local file context
+    const tmpFile = await Deno.makeTempFile({ suffix: ".ts" });
+    try {
+      const runnerCode = `
+import config from "file://${configPath}";
+const { runWithLoadedConfig } = await import("${import.meta.url}");
+const code = await runWithLoadedConfig(${JSON.stringify(Deno.args)}, config);
+Deno.exit(code);
+`;
+      await Deno.writeTextFile(tmpFile, runnerCode);
+
+      const cmd = new Deno.Command(Deno.execPath(), {
+        args: ["run", "--allow-read", "--allow-env", "--allow-run", "--allow-net", `file://${tmpFile}`],
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+        cwd: Deno.cwd(),
+      });
+      const status = await cmd.output();
+      Deno.exit(status.code);
+    } finally {
+      try { await Deno.remove(tmpFile); } catch { /* cleanup best-effort */ }
+    }
+  }
+
   const code = await run(args);
   Deno.exit(code);
 }
