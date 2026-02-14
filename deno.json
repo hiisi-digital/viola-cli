@@ -19,7 +19,7 @@
     "@std/fs": "jsr:@std/fs@^1",
     "@std/assert": "jsr:@std/assert@^1",
     "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1",
-    "@hiisi/viola": "jsr:@hiisi/viola@^0.1.9"
+    "@hiisi/viola": "jsr:@hiisi/viola@^0.3.0"
   },
   "lint": {
     "exclude": [
