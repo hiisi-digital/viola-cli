@@ -10,6 +10,7 @@
 
 import {
   type BaseLinter,
+  createGrammarRegistry,
   discoverPlugins,
   formatResults,
   type IssueCatalog,
@@ -298,8 +299,8 @@ async function run(cliArgs: typeof args): Promise<number> {
       // Pass rules and catalogs for rule evaluation
       rules: builderConfig?.rules,
       catalogs,
-      // Pass grammar registry for tree-sitter based extraction
-      grammarRegistry: builderConfig?.grammarRegistry,
+      // Pass grammar registry for tree-sitter based extraction (required)
+      grammarRegistry: builderConfig?.grammarRegistry ?? createGrammarRegistry(),
     };
 
     const results = await runViola(options);
@@ -437,7 +438,7 @@ async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Pr
       skip,
       rules: builderConfig?.rules,
       catalogs,
-      grammarRegistry: builderConfig?.grammarRegistry,
+      grammarRegistry: builderConfig?.grammarRegistry ?? createGrammarRegistry(),
     };
 
     const results = await runViola(options);
