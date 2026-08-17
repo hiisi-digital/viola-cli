@@ -81,7 +81,7 @@ import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
   .use(defaultLints)
-  .set("similar-functions.threshold", 0.85)
+  .set("similar-functions.minSimilarity", 0.85)
   .rule(report.off, when.in("**/*_test.ts"))
   .rule(report.off, when.in("src/generated/**"))
   .rule(report.error, when.category.is(Category.Correctness));
