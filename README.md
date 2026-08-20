@@ -13,8 +13,8 @@
 ## What it does
 
 `viola-cli` is a command-line interface for
-[`@hiisi/viola`](https://jsr.io/@hiisi/viola). Loads your `viola.config.ts` and
-runs convention linters.
+[`@hiisi/viola`](https://jsr.io/@hiisi/viola). Loads your `viola.config.ts`
+(or a `viola` section in `deno.json`) and runs convention linters.
 
 Use this when you want to run viola from deno tasks, CI, or pre-commit hooks.
 For programmatic use or custom integrations, use `@hiisi/viola` directly.
@@ -53,31 +53,35 @@ deno run -A jsr:@hiisi/viola-cli
 ## Usage
 
 ```bash
-viola                          # Run with viola.config.ts
-viola --config ./other.ts      # Use different config
-viola --report-only            # Don't fail on errors
-viola --only my-linter         # Run specific linters
-viola --skip slow-linter       # Skip specific linters
-viola --verbose                # Verbose output
-viola --project /path/to/proj  # Custom project root
-viola --list                   # List available linters
+viola                          # run with viola.config.ts
+viola --config ./other.ts      # use a different config file (-c)
+viola --report-only            # report issues without failing, exit code 0 (-r)
+viola --only my-linter         # only run specified linters (comma-separated)
+viola --skip slow-linter       # skip specified linters (comma-separated)
+viola --include src,app        # directories to include (-i)
+viola --plugins @hiisi/viola-default-lints  # plugin specifiers, overrides config
+viola --parallel               # run checkers in parallel
+viola --verbose                # verbose output (-v)
+viola --project /path/to/proj  # project root directory (-p)
+viola --list                   # list available linters (-l)
+viola --help                   # full option reference (-h)
 ```
 
 ## Configuration
 
-The CLI loads config from `viola.config.ts` in the current directory (or use
-`--config`).
+The CLI loads config from `viola.config.ts` (preferred) or a `viola` section in
+`deno.json`, resolved from the current directory (or use `--config`).
 
 See [`@hiisi/viola`](https://jsr.io/@hiisi/viola) for full configuration
 documentation.
 
 ```ts
-import { Category, Impact, report, viola, when } from "@hiisi/viola";
+import { Category, report, viola, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
   .use(defaultLints)
-  .set("similar-functions.threshold", 0.85)
+  .set("similar-functions.minSimilarity", 0.85)
   .rule(report.off, when.in("**/*_test.ts"))
   .rule(report.off, when.in("src/generated/**"))
   .rule(report.error, when.category.is(Category.Correctness));

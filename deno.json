@@ -1,6 +1,7 @@
 {
   "name": "@hiisi/viola-cli",
   "version": "0.3.0",
+  "description": "CLI for viola convention linter.",
   "exports": "./mod.ts",
   "publish": {
     "include": [
