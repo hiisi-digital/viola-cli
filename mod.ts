@@ -21,7 +21,7 @@ import {
   type ViolaOptions,
 } from "@hiisi/viola";
 import { parseArgs } from "@std/cli/parse-args";
-import { resolve } from "@std/path";
+import { dirname, fromFileUrl, resolve } from "@std/path";
 
 export { main, run, runWithLoadedConfig };
 
@@ -467,11 +467,27 @@ async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Pr
  * work from network-origin modules).
  */
 async function main(): Promise<void> {
-  const isRemoteOrigin = !import.meta.url.startsWith("file://");
+  // A config is loaded in a subprocess carrying the project's own manifest,
+  // and the reason is the import map rather than where this cli came from.
+  //
+  // `viola.config.ts` imports `@hiisi/viola-default-lints` by name, which is
+  // the only sane way to write one. Importing it from this process resolves
+  // that specifier against THIS package's map, where it does not appear, so
+  // every per-package config failed to load with "not a dependency and not in
+  // import map". The guard used to be "did this cli come from jsr", which is
+  // a different question that happens to correlate.
+  //
+  // Where the project has no manifest of its own there is nothing to carry,
+  // and loading in-process is as good as it gets.
+  const projectRootForConfig = args.project ? resolve(args.project) : Deno.cwd();
+  const projectManifest = resolve(projectRootForConfig, "deno.json");
+  const needsProjectMap = await Deno.stat(projectManifest)
+    .then(() => true)
+    .catch(() => false);
 
-  if (isRemoteOrigin) {
+  if (needsProjectMap) {
     // Find the config file path
-    const projectRoot = args.project ? resolve(args.project) : Deno.cwd();
+    const projectRoot = projectRootForConfig;
     const configPath = args.config
       ? resolve(args.config)
       : resolve(projectRoot, "viola.config.ts");
@@ -497,8 +513,54 @@ Deno.exit(code);
 `;
       await Deno.writeTextFile(tmpFile, runnerCode);
 
+      // The runner sits in a temp directory, so without the project's own
+      // manifest it has no import map and every bare specifier in the config
+      // fails to resolve. A config that imports `@hiisi/viola-default-lints`
+      // by name, which is the only sane way to write one, could not load at
+      // all before this.
+      // The subprocess needs both maps: the config's bare specifiers resolve
+      // against the project's, and this module's own imports against ours.
+      // Deno takes one manifest, so they are merged into a temp one. The
+      // project wins on a clash, since it is the config being loaded.
+      const ownManifest = resolve(dirname(fromFileUrl(import.meta.url)), "deno.json");
+      const readMap = async (at: string): Promise<Record<string, unknown>> => {
+        try {
+          return JSON.parse(await Deno.readTextFile(at)) as Record<string, unknown>;
+        } catch {
+          return {};
+        }
+      };
+      const own = await readMap(ownManifest);
+      const proj = await readMap(projectManifest);
+      const linkOf = (m: Record<string, unknown>, base: string): string[] =>
+        (Array.isArray(m.links) ? m.links as string[] : []).map((l) => resolve(base, l));
+
+      const merged = {
+        imports: {
+          ...(own.imports as Record<string, string> ?? {}),
+          ...(proj.imports as Record<string, string> ?? {}),
+        },
+        links: [
+          ...new Set([
+            ...linkOf(own, dirname(ownManifest)),
+            ...linkOf(proj, projectRootForConfig),
+          ]),
+        ],
+      };
+      const projectConfig = await Deno.makeTempFile({ suffix: ".json" });
+      await Deno.writeTextFile(projectConfig, JSON.stringify(merged, null, 2));
+      const withConfig = true;
+
       const cmd = new Deno.Command(Deno.execPath(), {
-        args: ["run", "--allow-read", "--allow-env", "--allow-run", "--allow-net", `file://${tmpFile}`],
+        args: [
+          "run",
+          "--allow-read",
+          "--allow-env",
+          "--allow-run",
+          "--allow-net",
+          ...(withConfig ? ["-c", projectConfig] : []),
+          `file://${tmpFile}`,
+        ],
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
