@@ -536,6 +536,23 @@ Deno.exit(code);
         (Array.isArray(m.links) ? m.links as string[] : []).map((l) => resolve(base, l));
 
       const merged = {
+        // The temp manifest is what the config load resolves against, and it is
+        // never published. Carrying the caller's dependency-age choice here is
+        // the only place it reaches the subprocess: passing the flag on the
+        // outer invocation does not, so a freshly published dependency stayed
+        // unreachable and the config silently fell back to whatever the
+        // registry last accepted. Which version a lint ran was then invisible.
+        // The temp manifest is what the config load resolves against, so any
+        // setting that governs resolution has to be carried here or it does
+        // not reach the subprocess. The project's own choice wins; the flag on
+        // this invocation is the fallback.
+        ...(proj.minimumDependencyAge !== undefined
+          ? { minimumDependencyAge: proj.minimumDependencyAge }
+          : Deno.args.some((a) =>
+              a.startsWith("--min-dep-age") || a.startsWith("--minimum-dependency-age")
+            )
+          ? { minimumDependencyAge: "0" }
+          : {}),
         imports: {
           ...(own.imports as Record<string, string> ?? {}),
           ...(proj.imports as Record<string, string> ?? {}),
@@ -547,6 +564,11 @@ Deno.exit(code);
           ]),
         ],
       };
+      const ageFlag = Deno.args.find((a) =>
+        a.startsWith("--min-dep-age") || a.startsWith("--minimum-dependency-age")
+      );
+      const minDepAge = ageFlag === undefined ? [] : [ageFlag];
+
       const projectConfig = await Deno.makeTempFile({ suffix: ".json" });
       await Deno.writeTextFile(projectConfig, JSON.stringify(merged, null, 2));
       const withConfig = true;
@@ -559,6 +581,12 @@ Deno.exit(code);
           "--allow-run",
           "--allow-net",
           ...(withConfig ? ["-c", projectConfig] : []),
+          // Forward the dependency-age flag when this process was started with
+          // it. The subprocess resolves the config's own imports, so without
+          // this a freshly published dependency is unreachable there even
+          // though the caller explicitly allowed it, and the config silently
+          // falls back to whatever the registry last accepted.
+          ...minDepAge,
           `file://${tmpFile}`,
         ],
         stdin: "inherit",
