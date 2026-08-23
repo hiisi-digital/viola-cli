@@ -17,54 +17,115 @@ import {
   loadConfig,
   registerDiscoveredLinters,
   registry,
+  runProject,
   runViola,
   type ViolaOptions,
 } from "@hiisi/viola";
 import { parseArgs } from "@std/cli/parse-args";
-import { dirname, fromFileUrl, resolve } from "@std/path";
+import { dirname, fromFileUrl, resolve, toFileUrl } from "@std/path";
 
 export { main, run, runWithLoadedConfig };
 
-interface CliArgs {
-  help: boolean;
-  "report-only": boolean;
-  verbose: boolean;
-  list: boolean;
-  parallel: boolean;
-  only?: string;
-  skip?: string;
-  include?: string;
-  project?: string;
-  config?: string;
-  plugins?: string;
-  h?: boolean;
-  r?: boolean;
-  v?: boolean;
-  l?: boolean;
-  p?: string;
-  i?: string;
-  c?: string;
-  _: (string | number)[];
+/**
+ * Every flag, said once.
+ *
+ * The name of each used to appear in up to four of `parseArgs`'s lists: the
+ * booleans, the strings, the aliases and the defaults. Nothing tied them
+ * together, so a name misspelled in one list is a flag that parses differently
+ * from the way it was declared, and neither `parseArgs` nor the compiler has
+ * anything to say about it.
+ */
+const FLAGS = {
+  "help": { kind: "boolean", short: "h" },
+  "report-only": { kind: "boolean", short: "r", default: false },
+  "verbose": { kind: "boolean", short: "v", default: false },
+  "list": { kind: "boolean", short: "l" },
+  "parallel": { kind: "boolean", default: false },
+  "only": { kind: "string" },
+  "skip": { kind: "string" },
+  "include": { kind: "string", short: "i" },
+  "project": { kind: "string", short: "p" },
+  "config": { kind: "string", short: "c" },
+  "plugins": { kind: "string" },
+} as const satisfies Record<string, {
+  readonly kind: "boolean" | "string";
+  readonly short?: string;
+  readonly default?: boolean;
+}>;
+
+type FlagName = keyof typeof FLAGS;
+
+/** One flag's declaration. */
+type FlagOf<K extends FlagName> = (typeof FLAGS)[K];
+
+const flagEntries = Object.entries(FLAGS) as [
+  FlagName,
+  (typeof FLAGS)[FlagName],
+][];
+
+/**
+ * What `parseArgs` hands back, derived from the flag table below.
+ *
+ * Written out by hand this listed every flag a third time, after the table and
+ * the parser configuration, so a name could be spelled one way in the type and
+ * another in the parser with nothing to say the two had come apart.
+ */
+type CliArgs =
+  & {
+    [K in FlagName as FlagOf<K>["kind"] extends "boolean" ? K : never]: boolean;
+  }
+  & {
+    [K in FlagName as FlagOf<K>["kind"] extends "string" ? K : never]?: string;
+  }
+  & { readonly _: (string | number)[] };
+
+/** Print an error's stack, when there is one and the run asked for it. */
+function reportStack(error: unknown): void {
+  if (error instanceof Error && error.stack !== undefined) {
+    console.error("\nStack trace:");
+    console.error(error.stack);
+  }
 }
 
-const args: CliArgs = parseArgs(Deno.args, {
-  boolean: ["help", "report-only", "verbose", "list", "parallel"],
-  string: ["only", "skip", "include", "project", "config", "plugins"],
-  alias: {
-    h: "help",
-    r: "report-only",
-    v: "verbose",
-    l: "list",
-    p: "project",
-    i: "include",
-    c: "config",
-  },
-  default: {
-    "report-only": false,
-    verbose: false,
-    parallel: false,
-  },
-});
+/** What a run says when nothing is configured to check anything. */
+const NOTHING_CONFIGURED = "\nNo plugins configured.";
+
+/** The two spellings of the dependency-age flag, which is deno's, not ours. */
+const AGE_FLAGS = ["--min-dep-age", "--minimum-dependency-age"] as const;
+
+/** Whether an argument is one of them. */
+function isAgeFlag(arg: string): boolean {
+  return AGE_FLAGS.some((flag) => arg.startsWith(flag));
+}
+
+/** The flag table, in the shape `parseArgs` wants. */
+const PARSE_OPTIONS = {
+  boolean: flagEntries.filter(([, f]) => f.kind === "boolean").map(([n]) => n),
+  string: flagEntries.filter(([, f]) => f.kind === "string").map(([n]) => n),
+  alias: Object.fromEntries(
+    flagEntries.filter(([, f]) => "short" in f).map((
+      [n, f],
+    ) => [(f as { short: string }).short, n]),
+  ),
+  default: Object.fromEntries(
+    flagEntries.filter(([, f]) => "default" in f).map((
+      [n, f],
+    ) => [n, (f as { default: boolean }).default]),
+  ),
+};
+
+/**
+ * Read the arguments, the one way this cli reads them.
+ *
+ * There were two `parseArgs` calls with two hand-written copies of the flag
+ * lists, so a flag added to one entry point was missing from the other and
+ * neither the parser nor the compiler had anything to say about it.
+ */
+function parseCliArgs(argv: readonly string[]): CliArgs {
+  return parseArgs([...argv], PARSE_OPTIONS) as CliArgs;
+}
+
+const args: CliArgs = parseCliArgs(Deno.args);
 
 function showHelp(): void {
   console.log(`
@@ -135,35 +196,14 @@ function registerBuilderLinters(
   return catalogs;
 }
 
-async function listLinters(
-  projectRoot: string,
-  verbose: boolean,
-  configPath?: string,
-): Promise<void> {
-  // Load config to get linters
-  const { config, builderConfig } = await loadConfig(projectRoot, {
-    verbose,
-    configPath,
-  });
-
-  // Register linters from builder config or string plugins
-  if (builderConfig && builderConfig.linters.length > 0) {
-    registerBuilderLinters(builderConfig.linters);
-  } else if (config.plugins.length > 0) {
-    console.log("\nLoading plugins...");
-    const discovery = await discoverPlugins(config.plugins, { verbose });
-    registerDiscoveredLinters(discovery);
-  } else {
-    console.log("\nNo plugins configured.");
-    console.log("Create a viola.config.ts with .use() to add linters.");
-    console.log("\nExample:");
-    console.log("  import { viola } from '@hiisi/viola';");
-    console.log("  import { defaultLints } from '@hiisi/viola-default-lints';");
-    console.log("  export default viola().use(defaultLints);");
-    console.log();
-    return;
-  }
-
+/**
+ * Print what is registered, and say so when nothing is.
+ *
+ * Both entry points listed linters, each with its own copy of the loading, the
+ * empty cases and the table. Four messages existed twice, so one of them could
+ * be improved and the other left as it was with nothing to notice.
+ */
+function printLinters(): void {
   const linters = registry.getAll();
 
   if (linters.length === 0) {
@@ -172,19 +212,58 @@ async function listLinters(
   }
 
   console.log("\nAvailable linters:\n");
-
-  const maxIdLen = Math.max(
-    ...linters.map((l: BaseLinter) => l.meta.id.length),
-  );
-
+  const width = Math.max(...linters.map((l: BaseLinter) => l.meta.id.length));
   for (const linter of linters) {
-    const id = linter.meta.id.padEnd(maxIdLen);
-    const issueCount = Object.keys(linter.catalog).length;
-    console.log(`  ${id}  (${issueCount} issues)  ${linter.meta.description}`);
+    const id = linter.meta.id.padEnd(width);
+    const issues = Object.keys(linter.catalog).length;
+    console.log(`  ${id}  (${issues} issues)  ${linter.meta.description}`);
+  }
+  console.log(`\nTotal: ${linters.length} linters loaded\n`);
+}
+
+/**
+ * Register whatever the config declares, and say what it found.
+ *
+ * Returns false when nothing was registered, which is not a failure to report
+ * here: the caller decides whether an unlintable project is an error.
+ */
+async function registerFrom(
+  config: { readonly plugins: readonly string[] },
+  builderConfig: { readonly linters: readonly BaseLinter[] } | undefined,
+  verbose: boolean,
+): Promise<boolean> {
+  if (builderConfig && builderConfig.linters.length > 0) {
+    registerBuilderLinters(builderConfig.linters);
+    return true;
+  }
+  if (config.plugins.length > 0) {
+    console.log("\nLoading plugins...");
+    registerDiscoveredLinters(
+      await discoverPlugins([...config.plugins], { verbose }),
+    );
+    return true;
+  }
+  return false;
+}
+
+async function listLinters(
+  projectRoot: string,
+  verbose: boolean,
+  configPath?: string,
+): Promise<void> {
+  const { config, builderConfig } = await loadConfig(projectRoot, {
+    verbose,
+    ...(configPath === undefined ? {} : { configPath }),
+  });
+
+  if (!await registerFrom(config, builderConfig, verbose)) {
+    console.log(NOTHING_CONFIGURED);
+    console.log("Create a viola.config.ts with .use() to add linters.");
+    console.log();
+    return;
   }
 
-  const _linterCount = builderConfig?.linters.length ?? config.plugins.length;
-  console.log(`\nTotal: ${linters.length} linters loaded\n`);
+  printLinters();
 }
 
 /**
@@ -205,119 +284,35 @@ async function run(cliArgs: typeof args): Promise<number> {
     return 0;
   }
 
-  // Load config
-  const { config, sources, builderConfig } = await loadConfig(projectRoot, {
-    verbose: cliArgs.verbose,
-    configPath,
-  });
-
-  // Parse CLI overrides
-  const include = cliArgs.include
-    ? cliArgs.include.split(",").map((s: string) => s.trim())
-    : config.include.length > 0
-    ? config.include
-    : ["src", "packages", "app"];
-
-  const only = cliArgs.only
-    ? cliArgs.only.split(",").map((s: string) => s.trim())
-    : undefined;
-
-  const skip = cliArgs.skip
-    ? cliArgs.skip.split(",").map((s: string) => s.trim())
-    : undefined;
-
-  // Check if we have linters (from builder or string plugin specifiers)
-  const hasBuilderLinters = builderConfig && builderConfig.linters.length > 0;
-  const hasStringPlugins = config.plugins.length > 0 || cliArgs.plugins;
-
-  if (!hasBuilderLinters && !hasStringPlugins) {
-    console.error("Error: No plugins configured.");
-    console.error("Create a viola.config.ts with .use() to add linters.");
-    console.error("\nExample:");
-    console.error("  import { viola } from '@hiisi/viola';");
-    console.error(
-      "  import { defaultLints } from '@hiisi/viola-default-lints';",
-    );
-    console.error("  export default viola().use(defaultLints);");
-    return 1;
-  }
-
-  // Get string plugins from CLI or config (only used if no builder config)
-  const plugins = cliArgs.plugins
-    ? cliArgs.plugins.split(",").map((s: string) => s.trim())
-    : config.plugins;
-
-  // Print header
-  if (cliArgs.verbose) {
-    console.log("\n" + "=".repeat(60));
-    console.log("VIOLA");
-    console.log("=".repeat(60));
-    console.log("\nConfiguration:");
-    console.log(`  Project root: ${projectRoot}`);
-    console.log(`  Include: ${include.join(", ")}`);
-    if (hasBuilderLinters) {
-      console.log(
-        `  Linters: ${builderConfig!.linters.length} from viola.config.ts`,
-      );
-    } else {
-      console.log(`  Plugins: ${plugins.join(", ")}`);
-    }
-    console.log(`  Report only: ${cliArgs["report-only"]}`);
-    if (config.inherit.length > 0) {
-      console.log(`  Inherit: ${config.inherit.join(", ")}`);
-    }
-    if (only) console.log(`  Only: ${only.join(", ")}`);
-    if (skip) console.log(`  Skip: ${skip.join(", ")}`);
-    if (sources.length > 0) {
-      console.log("\n  Config sources:");
-      for (const source of sources) {
-        console.log(`    - ${source.path} (${source.type})`);
-      }
-    }
-    console.log();
-  }
-
   try {
-    // If we have builder config with linters, register them directly
-    let catalogs: Map<string, IssueCatalog> | undefined;
-    if (hasBuilderLinters) {
-      catalogs = registerBuilderLinters(builderConfig!.linters);
-    }
-
-    // Build options - include rules from builder config for rule evaluation
-    const options: ViolaOptions = {
+    // The run itself is `runProject`, which is viola's, and this is the only
+    // place the cli adds anything to it: the arguments a person typed, and the
+    // config module the subprocess above already had to import. Registering
+    // linters, resolving the include list and reading the grammar rules all
+    // used to live here, which meant a project could not perform its own run
+    // without shelling out to this.
+    return await runProject({
       projectRoot,
-      include,
-      plugins: hasBuilderLinters ? [] : plugins, // Empty if using builder linters (already registered)
-      inherit: config.inherit,
-      linterConfig: config.linterConfig,
+      ...(cliArgs.include === undefined ? {} : {
+        include: cliArgs.include.split(",").map((s: string) => s.trim()),
+      }),
+      ...(configPath === undefined ? {} : { configPath }),
+      ...(cliArgs.only === undefined ? {} : {
+        only: cliArgs.only.split(",").map((s: string) => s.trim()),
+      }),
+      ...(cliArgs.skip === undefined ? {} : {
+        skip: cliArgs.skip.split(",").map((s: string) => s.trim()),
+      }),
       reportOnly: cliArgs["report-only"],
       verbose: cliArgs.verbose,
       parallel: cliArgs.parallel,
-      only,
-      skip,
-      // Pass rules and catalogs for rule evaluation
-      rules: builderConfig?.rules,
-      catalogs,
-      // Pass grammar registry for tree-sitter based extraction (required)
-      grammarRegistry: builderConfig?.grammarRegistry ?? createGrammarRegistry(),
-    };
-
-    const results = await runViola(options);
-    console.log(formatResults(results));
-
-    if (results.hasErrors && !cliArgs["report-only"]) {
-      return 1;
-    }
-    return 0;
+      env: Deno.env.toObject(),
+    });
   } catch (error) {
     console.error("\nError:");
     console.error(error instanceof Error ? error.message : String(error));
 
-    if (cliArgs.verbose && error instanceof Error && error.stack) {
-      console.error("\nStack trace:");
-      console.error(error.stack);
-    }
+    if (cliArgs.verbose) reportStack(error);
 
     return 1;
   }
@@ -327,25 +322,11 @@ async function run(cliArgs: typeof args): Promise<number> {
  * Run viola with a pre-loaded config module (for use from local runner scripts).
  * This bypasses the file:// import issue when running from JSR context.
  */
-async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Promise<number> {
-  const cliArgs: CliArgs = parseArgs(rawArgs, {
-    boolean: ["help", "report-only", "verbose", "list", "parallel"],
-    string: ["only", "skip", "include", "project", "config", "plugins"],
-    alias: {
-      h: "help",
-      r: "report-only",
-      v: "verbose",
-      l: "list",
-      p: "project",
-      i: "include",
-      c: "config",
-    },
-    default: {
-      "report-only": false,
-      verbose: false,
-      parallel: false,
-    },
-  });
+async function runWithLoadedConfig(
+  rawArgs: string[],
+  configModule: unknown,
+): Promise<number> {
+  const cliArgs: CliArgs = parseCliArgs(rawArgs);
 
   if (cliArgs.help) {
     showHelp();
@@ -363,98 +344,41 @@ async function runWithLoadedConfig(rawArgs: string[], configModule: unknown): Pr
   });
 
   if (cliArgs.list) {
-    if (builderConfig && builderConfig.linters.length > 0) {
-      registerBuilderLinters(builderConfig.linters);
-    } else if (config.plugins.length > 0) {
-      console.log("\nLoading plugins...");
-      const discovery = await discoverPlugins(config.plugins, { verbose: cliArgs.verbose });
-      registerDiscoveredLinters(discovery);
-    } else {
-      console.log("\nNo plugins configured.");
+    if (!await registerFrom(config, builderConfig, cliArgs.verbose)) {
+      console.log(NOTHING_CONFIGURED);
       return 1;
     }
-
-    const linters = registry.getAll();
-    if (linters.length === 0) {
-      console.log("\nNo linters found in loaded plugins.");
-      return 0;
-    }
-
-    console.log("\nAvailable linters:\n");
-    const maxIdLen = Math.max(...linters.map((l: BaseLinter) => l.meta.id.length));
-    for (const linter of linters) {
-      const id = linter.meta.id.padEnd(maxIdLen);
-      const issueCount = Object.keys(linter.catalog).length;
-      console.log(`  ${id}  (${issueCount} issues)  ${linter.meta.description}`);
-    }
-    console.log(`\nTotal: ${linters.length} linters loaded\n`);
+    printLinters();
     return 0;
   }
 
-  // Same logic as run() from here
-  const include = cliArgs.include
-    ? cliArgs.include.split(",").map((s: string) => s.trim())
-    : config.include.length > 0
-    ? config.include
-    : ["src", "packages", "app"];
-
-  const only = cliArgs.only
-    ? cliArgs.only.split(",").map((s: string) => s.trim())
-    : undefined;
-
-  const skip = cliArgs.skip
-    ? cliArgs.skip.split(",").map((s: string) => s.trim())
-    : undefined;
-
-  const hasBuilderLinters = builderConfig && builderConfig.linters.length > 0;
-  const hasStringPlugins = config.plugins.length > 0 || cliArgs.plugins;
-
-  if (!hasBuilderLinters && !hasStringPlugins) {
-    console.error("Error: No plugins configured.");
-    console.error("Create a viola.config.ts with .use() to add linters.");
-    return 1;
-  }
-
-  const plugins = cliArgs.plugins
-    ? cliArgs.plugins.split(",").map((s: string) => s.trim())
-    : config.plugins;
-
   try {
-    let catalogs: Map<string, IssueCatalog> | undefined;
-    if (hasBuilderLinters) {
-      catalogs = registerBuilderLinters(builderConfig!.linters);
-    }
-
-    const options: ViolaOptions = {
+    // Identical to `run()` except for the config module, which the subprocess
+    // above already had to import. `runProject` is viola's, so the cli and a
+    // project running viola on itself execute the same path by construction
+    // rather than by two implementations agreeing.
+    return await runProject({
       projectRoot,
-      include,
-      plugins: hasBuilderLinters ? [] : plugins,
-      inherit: config.inherit,
-      linterConfig: config.linterConfig,
+      ...(cliArgs.include === undefined ? {} : {
+        include: cliArgs.include.split(",").map((s: string) => s.trim()),
+      }),
+      ...(configPath === undefined ? {} : { configPath }),
+      ...(cliArgs.only === undefined ? {} : {
+        only: cliArgs.only.split(",").map((s: string) => s.trim()),
+      }),
+      ...(cliArgs.skip === undefined ? {} : {
+        skip: cliArgs.skip.split(",").map((s: string) => s.trim()),
+      }),
       reportOnly: cliArgs["report-only"],
       verbose: cliArgs.verbose,
       parallel: cliArgs.parallel,
-      only,
-      skip,
-      rules: builderConfig?.rules,
-      catalogs,
-      grammarRegistry: builderConfig?.grammarRegistry ?? createGrammarRegistry(),
-    };
-
-    const results = await runViola(options);
-    console.log(formatResults(results));
-
-    if (results.hasErrors && !cliArgs["report-only"]) {
-      return 1;
-    }
-    return 0;
+      preloadedConfig: configModule,
+      env: Deno.env.toObject(),
+    });
   } catch (error) {
     console.error("\nError:");
     console.error(error instanceof Error ? error.message : String(error));
-    if (cliArgs.verbose && error instanceof Error && error.stack) {
-      console.error("\nStack trace:");
-      console.error(error.stack);
-    }
+    if (cliArgs.verbose) reportStack(error);
     return 1;
   }
 }
@@ -479,7 +403,9 @@ async function main(): Promise<void> {
   //
   // Where the project has no manifest of its own there is nothing to carry,
   // and loading in-process is as good as it gets.
-  const projectRootForConfig = args.project ? resolve(args.project) : Deno.cwd();
+  const projectRootForConfig = args.project
+    ? resolve(args.project)
+    : Deno.cwd();
   const projectManifest = resolve(projectRootForConfig, "deno.json");
   const needsProjectMap = await Deno.stat(projectManifest)
     .then(() => true)
@@ -531,7 +457,10 @@ Deno.exit(code);
         : null;
       const readMap = async (at: string): Promise<Record<string, unknown>> => {
         try {
-          return JSON.parse(await Deno.readTextFile(at)) as Record<string, unknown>;
+          return JSON.parse(await Deno.readTextFile(at)) as Record<
+            string,
+            unknown
+          >;
         } catch {
           return {};
         }
@@ -539,7 +468,42 @@ Deno.exit(code);
       const own = ownManifest === null ? {} : await readMap(ownManifest);
       const proj = await readMap(projectManifest);
       const linkOf = (m: Record<string, unknown>, base: string): string[] =>
-        (Array.isArray(m.links) ? m.links as string[] : []).map((l) => resolve(base, l));
+        (Array.isArray(m.links) ? m.links as string[] : []).map((l) =>
+          resolve(base, l)
+        );
+
+      // A package linting itself has to lint with itself. Without this the
+      // subprocess resolves the project's own name to the published copy, so
+      // `viola` measured its own source with the engine from the registry and
+      // a defect fixed on disk stayed invisible to the gate meant to catch it.
+      // Self-mapping is what makes a self-linting config true.
+      //
+      // The mapping goes in `imports` rather than by carrying `name` and
+      // `exports`, because deno resolves a package's own name from `exports`
+      // only relative to the manifest that declares them, and this manifest is
+      // a temp file elsewhere. An absolute `file://` in the map has no anchor
+      // to be wrong about.
+      const selfMap = (
+        m: Record<string, unknown>,
+        base: string,
+      ): Record<string, string> => {
+        const name = typeof m.name === "string" ? m.name : null;
+        if (name === null) return {};
+        const exp = m.exports;
+        if (typeof exp === "string") {
+          return { [name]: toFileUrl(resolve(base, exp)).href };
+        }
+        if (exp === null || typeof exp !== "object") return {};
+        const out: Record<string, string> = {};
+        for (
+          const [sub, target] of Object.entries(exp as Record<string, unknown>)
+        ) {
+          if (typeof target !== "string") continue;
+          const specifier = sub === "." ? name : name + sub.slice(1);
+          out[specifier] = toFileUrl(resolve(base, target)).href;
+        }
+        return out;
+      };
 
       const merged = {
         // The temp manifest is what the config load resolves against, and it is
@@ -554,14 +518,16 @@ Deno.exit(code);
         // this invocation is the fallback.
         ...(proj.minimumDependencyAge !== undefined
           ? { minimumDependencyAge: proj.minimumDependencyAge }
-          : Deno.args.some((a) =>
-              a.startsWith("--min-dep-age") || a.startsWith("--minimum-dependency-age")
-            )
+          : Deno.args.some(isAgeFlag)
           ? { minimumDependencyAge: "0" }
           : {}),
         imports: {
           ...(own.imports as Record<string, string> ?? {}),
           ...(proj.imports as Record<string, string> ?? {}),
+          // Last, so a package's own name always reaches its own source. A
+          // project that also lists its own name in `imports` pointing at the
+          // registry is describing what its consumers get, not what it is.
+          ...selfMap(proj, projectRootForConfig),
         },
         links: [
           ...new Set([
@@ -570,9 +536,7 @@ Deno.exit(code);
           ]),
         ],
       };
-      const ageFlag = Deno.args.find((a) =>
-        a.startsWith("--min-dep-age") || a.startsWith("--minimum-dependency-age")
-      );
+      const ageFlag = Deno.args.find(isAgeFlag);
       const minDepAge = ageFlag === undefined ? [] : [ageFlag];
 
       const projectConfig = await Deno.makeTempFile({ suffix: ".json" });
@@ -603,7 +567,9 @@ Deno.exit(code);
       const status = await cmd.output();
       Deno.exit(status.code);
     } finally {
-      try { await Deno.remove(tmpFile); } catch { /* cleanup best-effort */ }
+      try {
+        await Deno.remove(tmpFile);
+      } catch { /* cleanup best-effort */ }
     }
   }
 

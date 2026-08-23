@@ -13,8 +13,8 @@
 ## What it does
 
 `viola-cli` is a command-line interface for
-[`@hiisi/viola`](https://jsr.io/@hiisi/viola). Loads your `viola.config.ts`
-(or a `viola` section in `deno.json`) and runs convention linters.
+[`@hiisi/viola`](https://jsr.io/@hiisi/viola). Loads your `viola.config.ts` (or
+a `viola` section in `deno.json`) and runs convention linters.
 
 Use this when you want to run viola from deno tasks, CI, or pre-commit hooks.
 For programmatic use or custom integrations, use `@hiisi/viola` directly.

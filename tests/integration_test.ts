@@ -91,7 +91,7 @@ Deno.test("Integration - CLI fails with no config and no plugins", async () => {
   }
 
   assertEquals(result.code, 1, "Should exit with code 1");
-  assertStringIncludes(result.stderr, "No plugins configured");
+  assertStringIncludes(result.stderr, "no plugins configured");
 });
 
 Deno.test("Integration - CLI provides helpful error for missing config", async () => {
@@ -105,9 +105,11 @@ Deno.test("Integration - CLI provides helpful error for missing config", async (
   }
 
   assertEquals(result.code, 1);
-  assertStringIncludes(result.stderr, "No plugins configured");
-  assertStringIncludes(result.stderr, "Create a viola.config.ts");
-  assertStringIncludes(result.stderr, "Example:");
+  assertStringIncludes(result.stderr, "no plugins configured");
+  assertStringIncludes(result.stderr, "viola.config.ts");
+  // What the message has to carry is the file to create and the fact
+  // that a grammar is required, not any particular wording around them.
+  assertStringIncludes(result.stderr, "grammar");
 });
 
 Deno.test("Integration - CLI list shows helpful message when no plugins", async () => {
