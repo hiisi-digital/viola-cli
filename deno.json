@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola-cli",
-  "version": "0.3.0",
+  "version": "0.3.0-alpha.1",
   "description": "CLI for viola convention linter.",
   "exports": "./mod.ts",
   "publish": {
@@ -20,7 +20,7 @@
     "@std/fs": "jsr:@std/fs@^1",
     "@std/assert": "jsr:@std/assert@^1",
     "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@0.1.1-alpha.1",
-    "@hiisi/viola": "jsr:@hiisi/viola@0.3.0-alpha.2"
+    "@hiisi/viola": "jsr:@hiisi/viola@0.3.0-alpha.7"
   },
   "lint": {
     "exclude": [
@@ -43,8 +43,5 @@
     "run": "deno run -A mod.ts",
     "test": "deno test --allow-all"
   },
-  "links": [
-    "../viola",
-    "../flash-freeze"
-  ]
+  "minimumDependencyAge": "0"
 }
