@@ -522,7 +522,13 @@ Deno.exit(code);
       // against the project's, and this module's own imports against ours.
       // Deno takes one manifest, so they are merged into a temp one. The
       // project wins on a clash, since it is the config being loaded.
-      const ownManifest = resolve(dirname(fromFileUrl(import.meta.url)), "deno.json");
+      // Only a file-loaded cli has a manifest on disk to merge. Run from jsr,
+      // `import.meta.url` is an https url and its dependencies travel in its
+      // own module graph, so there is nothing to carry and `fromFileUrl`
+      // would throw on it.
+      const ownManifest = import.meta.url.startsWith("file://")
+        ? resolve(dirname(fromFileUrl(import.meta.url)), "deno.json")
+        : null;
       const readMap = async (at: string): Promise<Record<string, unknown>> => {
         try {
           return JSON.parse(await Deno.readTextFile(at)) as Record<string, unknown>;
@@ -530,7 +536,7 @@ Deno.exit(code);
           return {};
         }
       };
-      const own = await readMap(ownManifest);
+      const own = ownManifest === null ? {} : await readMap(ownManifest);
       const proj = await readMap(projectManifest);
       const linkOf = (m: Record<string, unknown>, base: string): string[] =>
         (Array.isArray(m.links) ? m.links as string[] : []).map((l) => resolve(base, l));
@@ -559,7 +565,7 @@ Deno.exit(code);
         },
         links: [
           ...new Set([
-            ...linkOf(own, dirname(ownManifest)),
+            ...(ownManifest === null ? [] : linkOf(own, dirname(ownManifest))),
             ...linkOf(proj, projectRootForConfig),
           ]),
         ],
